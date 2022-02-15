@@ -1,0 +1,58 @@
+This text describes the steps taken to query, retrieve, and document retracted CMIP6 datasets on ESGF using standard Python libraries, the Synda tool, and basic Linux functions. These series of steps are not meant to be the sole means of doing such work, rather, they exist to simplify the logic behind a process not yet inherently built into ESGF software. This may be useful for users managing their own repositories based upon the data contained within ESGF and may help in solving issues regarding long-term data integrity.
+
+
+STEP 1: IDENTIFYING ESGF METADATA
+
+Background: ESGF datasets can essentially be described as aggregations of a set of related NetCDF files. Both the datasets themselves and the individual files within those datasets contain metadata. These Python scripts focus their attention primarily on 3 sets of metadata regarding retraction.
+
+   (1) Dataset PIDs (Format: hdl:/21.14100/[8-digit hex]-[4-digit hex]-[4-digit hex]-[4-digit hex]-[12-digit hex])
+   (2) Dataset string IDs (Format: [PROJECT].[MIP].[INSTITUTION_ID].[SOURCE_ID].[experiment_id].[variant_label].[Table_id].[variable].[grid_label]
+   (3) File-level tracking IDs (Format: hdl:/21.14100/[8-digit hex]-[4-digit hex]-[4-digit hex]-[4-digit hex]-[12-digit hex])
+
+Other pieces of metadata such as dataset errata IDs, file-level SHA 256 checksums, and individual file names should also be noted for their additional uses in aiding file system data discovery, data consistency across similar tracking IDs, and information gathering about the reasoning behind dataset retractions. However, these scripts will stick to the 3 described above.
+
+Action 1: Store dataset PIDs, dataset string IDs, and file-level tracking IDs in a CSV file to be updated on a persistent (say, weekly, basis)
+
+
+STEP 2: QUERY ESGF FOR GENERAL RETRACTION INFORMATION
+
+Background: Typically, a user can discover ESGF datasets through the CoG interface provided by a number of index and data nodes within the ESGF network. Tier 1 index nodes such as LLNL, DKRZ, CEDA, NSC/LUI, and NCI are the most popular for search. The methods of data discovery for a user are fairly straightforward, utilizing drop-down dataset parameter entries and checkboxes for narrowing down the list of sought-after files. 
+
+What may be unbeknownest to some, whenever a query is executed on the ESGF search interface, there is an option to generate a .json output of the result seen on the GUI page. This .json file allows us to easily scrape the search interface for dataset and file-level metadata. In addition, for this step specifically, it can provide general information about generic and specific search results, particularly in regard to retraction. There is 1 unfortunate caveat however. Search results using this JSON retrieval method are limited to about 10,000 datasets. The ESGF API will start to break down and simply outright deny the retrieval of datasets past a certain limit. To play it safe for this application, the limit was chosen to be 9000.
+
+To optimize search and discovery, I decided to use the "experiment_id" facet (or parameter) as a first-order granularity for identifying the numbers of retracted datasets. As of 2022, very few CMIP6 experiments within ESGF contained over 9000 retractions. For the remaining that did, a second-order granularity of "variant_label" was chosen. So far, no variant_label under a specific dataset contains over 9000 retractions. If that ever were to happen, a third-order granularity would be decided. For now, we will only consider 2 orders of granularity.
+
+Action 1: Retrieve JSON of base search output. Set up the appropriate search URL, including the specific "retraction=true" parameter and the index node you wish to search from. This application will default to DKRZ as our first choice, since there is a slightly higher retraction count on DKRZ than the other nodes. We will also leave off the "replica" parameter, as we only care about the originals. Once the url has been established, call a "wget" command on the URL and save the output in JSON format.
+
+Action 2: Open the saved JSON file and save the following fields to a CSV file.
+   
+   (1) An experiment_id of retracted datasets
+   (2) The number of retractions in that experiment_id
+   (3) An indication and/or description of overflow (second-order search due to >9000 retractions)
+
+
+STEP 3: GENERATE FINAL LIST OF RETRACTIONS USING SYNDA
+
+Action 1: Using the CSV list generated in Step 2, use Synda to search for retracted dataset ID's 1 experiment at a time, occasionally searching through experiment ensembles.
+
+Action 2: Feed all Synda search results cleanly into a list
+
+Action 3: If retraction script has been run before, compare and contrast new retractions with older (previous) discovered ones and delete the old ones.
+
+
+STEP 4: RETRIEVE tracking_ID values for each dataset
+
+Action 1: Use Synda to dump each dataset's PID and place it into memory
+
+Action 2: Make an HTTP request to the DKRZ handle service using the PID already on hand (generates another JSON file in memory)
+
+Action 3: Grab the tracking_ids (semicolon separated list) from each dataset and place it into memory
+
+
+STEP 5: Write final CSV file
+
+Action 1: Insert the CMIP6 PID, dataset ID, and tracking_id list into a comma-separated format (CSV file)
+
+Action 2: Repeat steps 1-5 every week to go for refreshed ESGF repository
+
+
